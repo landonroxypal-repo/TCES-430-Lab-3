@@ -57,6 +57,14 @@ int main(void) {
     GPIOG->MODER  |=  (1UL << (7 * 2));
     GPIOG->OTYPER &= ~(1UL << 7);
 
+    // LCD D4 (PB15, D11) -> Output
+    // LCD D5 (PB14, D12) -> Output
+    // LCD D6 (PB9, D14) -> Output
+    // LCD D7 (PB8, D15) -> Output
+
+    // LCD RS (PA8, D5) -> Output
+    // LCD E (PA15, D9) -> Output
+
     // ------------------------------------------------------------
     // 3. EXTI INTERRUPT & PRIORITY CONFIGURATION (PI2)
     // ------------------------------------------------------------
