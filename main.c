@@ -1,5 +1,4 @@
 #include <stdint.h>
-#include <string.h>
 #include "stm32f7xx.h"
 
 #if !defined(__SOFT_FP__) && defined(__ARM_FP)
@@ -279,6 +278,8 @@ int main(void) {
     uint8_t toggle_count = 0;
     uint8_t pin_state = 0;
 
+    LCD_DisplayString("Awesome test");
+
     while (1) {
         // ------------------------------------------------------------
         // SEQUENTIAL STATE MACHINE (Driven by TIM2 ticks)
@@ -294,10 +295,10 @@ int main(void) {
             switch (current_state) {
                 case BLINK_LED2:
                     if (toggle_count < 10) { // 5 blinks = 10 toggles
-                    	char *st1 = "NOR -> GREEN -> ";
-						char *st2 = toString(toggle_count / 2);
-
-                    	LCD_DisplayString(strcat(st1, st2));
+//						char buffer[20];
+//
+//						snprintf(buffer, 20, "NOR -> GREEN -> %d", toggle_count / 2);
+//                    	LCD_DisplayString(buffer);
 
                         pin_state = !pin_state;
                         if (pin_state) GPIOB->BSRR = (1UL << 4);
@@ -313,10 +314,10 @@ int main(void) {
 
                 case BLINK_LED3:
                     if (toggle_count < 16) { // 8 blinks = 16 toggles
-                    	char *st1 = "NOR -> RED -> ";
-						char *st2 = toString(toggle_count / 2);
-
-                    	LCD_DisplayString(strcat(st1, st2));
+//						char buffer[20];
+//
+//						snprintf(buffer, 20, "NOR -> RED -> %d", toggle_count / 2);
+//                    	LCD_DisplayString(buffer);
 
                         pin_state = !pin_state;
                         if (pin_state) GPIOG->BSRR = (1UL << 7);
@@ -352,10 +353,10 @@ void EXTI2_IRQHandler(void) {
         // Execute the emergency sequence: 3 blinks on LED 1 (PI3)
         // 3 complete blinks = 6 alternate toggles
         for (int i = 0; i < 6; i++) {
-        	char *st1 = "INT2 -> YELLOW -> ";
-			char *st2 = toString(i / 2);
-
-        	LCD_DisplayString(strcat(st1, st2));
+//        	char *st1 = "INT2 -> YELLOW -> ";
+//			char *st2 = toString(i / 2);
+//
+//        	LCD_DisplayString(strcat(st1, st2));
 
             if (i % 2 == 0) {
                 GPIOI->BSRR = (1UL << 3);         // Turn LED 1 ON
@@ -383,10 +384,10 @@ void EXTI0_IRQHandler(void) {
         // Execute the emergency sequence: 5 blinks on LED 3 (PG7)
         // 5 complete blinks = 10 alternate toggles
         for (int i = 0; i < 10; i++) {
-        	char *st1 = "INT2 -> RED -> ";
-			char *st2 = toString(i / 2);
-
-        	LCD_DisplayString(strcat(st1, st2));
+//        	char *st1 = "INT2 -> RED -> ";
+//			char *st2 = toString(i / 2);
+//
+//        	LCD_DisplayString(strcat(st1, st2));
 
             if (i % 2 == 0) {
             	GPIOG->BSRR = (1UL << 7);          // Turn LED 3 ON
