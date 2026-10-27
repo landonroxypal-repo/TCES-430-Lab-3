@@ -67,7 +67,7 @@ int main(void) {
     // LCD D6 (PB9, D14) -> Output
     // LCD D7 (PB8, D15) -> Output
 
-    // LCD RS (PA8, D5) -> Output
+    // LCD RS (PA8, D10) -> Output
     // LCD E (PA15, D9) -> Output
 
     // ------------------------------------------------------------
@@ -93,22 +93,22 @@ int main(void) {
     // ------------------------------------------------------------
     // 4. EXTI INTERRUPT & PRIORITY CONFIGURATION (PI0)
     // ------------------------------------------------------------
-    // Route Port I Pin 2 (D8) to EXTI3 (Bits [15:12] in EXTICR[0] gets 0x8)
-    SYSCFG->EXTICR[0] &= ~(0xFUL << 15);
-    SYSCFG->EXTICR[0] |=  (0x8UL << 15);
+    // Route Port I Pin 0 (D5) to EXTI0 (Bits [3:0] in EXTICR[0] gets 0x8)
+    SYSCFG->EXTICR[0] &= ~(0xFUL << 0);
+    SYSCFG->EXTICR[0] |=  (0x8UL << 0);
 
-    EXTI->IMR  |= (1UL << 3);  // Unmask line 3
-    EXTI->FTSR |= (1UL << 3);  // Fall on button press (GND)
-    EXTI->RTSR &= ~(1UL << 3); // Disable rise trigger
+    EXTI->IMR  |= (1UL << 0);  // Unmask line 0
+    EXTI->FTSR |= (1UL << 0);  // Fall on button press (GND)
+    EXTI->RTSR &= ~(1UL << 0); // Disable rise trigger
 
-    // EXTI3 is IRQ number 9 in the NVIC table.
-    // NVIC->IP is a byte array indexed by IRQ number, EXTI3’s priority byte is IP[8]
+    // EXTI0 is IRQ number 6 in the NVIC table.
+    // NVIC->IP is a byte array indexed by IRQ number, EXTI0’s priority byte is IP[6]
     // Only upper 4 bits are implemented (16 levels)
     // lower number = higher priority
-    NVIC->IP[8] |=  (2UL << 8);   	  // Assign Priority 2 to IRQ9
+    NVIC->IP[6] =  (2UL << 4);   	  // Assign Priority 2 to IRQ6
 
-    // Enable IRQ9 (EXTI3); bit 9 of NVIC_ISER0
-    NVIC->ISER[0] |= (1UL << 9);         //Enable IRQ 9
+    // Enable IRQ6 (EXTI0); bit 6 of NVIC_ISER0
+    NVIC->ISER[0] |= (1UL << 6);         //Enable IRQ 6
 
     // ------------------------------------------------------------
     // 5. TIMER 2 CONFIGURATION (~250ms update window)
@@ -200,27 +200,27 @@ void EXTI2_IRQHandler(void) {
 }
 
 // ------------------------------------------------------------
-// 6. INTERRUPT SERVICE ROUTINE (ISR) FOR EXTI3
+// 6. INTERRUPT SERVICE ROUTINE (ISR) FOR EXTI0
 // ------------------------------------------------------------
-void EXTI3_IRQHandler(void) {
-    if (EXTI->PR & (1UL << 3)) {
-        EXTI->PR = (1UL << 3); // Clear EXTI pending flag
+void EXTI0_IRQHandler(void) {
+    if (EXTI->PR & (1UL << 0)) {
+        EXTI->PR = (1UL << 0); // Clear EXTI pending flag
 
         exti_triggered = 1; // Raise halt flag for the main background thread
 
-        // Execute the emergency sequence: 3 blinks on LED 1 (PI3)
+        // Execute the emergency sequence: 3 blinks on LED 3 (PG7)
         // 3 complete blinks = 6 alternate toggles
         for (int i = 0; i < 6; i++) {
             if (i % 2 == 0) {
-            	GPIOG->BSRR = (1UL << 7);   // Turn LED 3 ON
+            	GPIOG->BSRR = (1UL << 7);          // Turn LED 3 ON
             } else {
-            	GPIOG->BSRR = (1UL << 7);   // Turn LED 3 OFF
+            	GPIOG->BSRR = (1UL << (7 + 16));   // Turn LED 3 OFF
             }
             simple_delay(800000);
         }
 
-	 EXTI->PR = (1UL << 3); // Clear EXTI pending flag
-	 NVIC->ICPR[0] = (1UL << 9);   // Clear NVIC Pending bit for IRQ9
+	 EXTI->PR = (1UL << 0); // Clear EXTI pending flag
+	 NVIC->ICPR[0] = (1UL << 6);   // Clear NVIC Pending bit for IRQ6
         exti_triggered = 0; // Drop halt flag, allowing LED 2/3 to resume instantly
     }
 }
