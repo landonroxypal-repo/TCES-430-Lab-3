@@ -166,7 +166,7 @@ int main(void) {
     GPIOI->PUPDR  &= ~(3UL << (2 * 2));
     GPIOI->PUPDR  |=  (1UL << (2 * 2));
 
-    // Switch (PI0, D10) -> Input with Pull-up
+    // Switch (PI0, D5) -> Input with Pull-up
     GPIOI->MODER  &= ~(3UL << (2 * 0));
     GPIOI->PUPDR  &= ~(3UL << (2 * 0));
     GPIOI->PUPDR  |=  (1UL << (2 * 0));
