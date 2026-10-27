@@ -31,33 +31,27 @@ void LCD_DisplayString(char *str) {
 }
 
 // Only needs to convert up to 2 digits in length
-char* toString(int num) {
-	char* result;
+char* toString(uint8_t num) {
+	char str[2];
 
-	char zero[2];
-	zero[0] = '0';
-	zero[1] = '\0';
+    str[0] = (char)('0' + num);
+    str[1] = '\0';
 
-	if (num < 0) {
-		result = 0;
-	} else if (num < 10) {
-		char str[0];
-	    str[0] = (char)('0' + num);
-	    str[1] = '\0';
+	return str;
+}
 
-	    result = str;
-	} else if (num < 100) {
-		char str[0];
-	    str[0] = (char)('0' + (num / 10) % 10);
-	    str[1] = (char)('0' + num % 10);
-	    str[2] = '\0';
+void TIM3_DelayMs(uint32_t ms) {
+	if (ms == 0) return;
 
-	    result = str;
-	} else {
-		return zero;
-	}
+	TIM3->CNT = 0;
+	TIM3->ARR = ms;
+	TIM3->CR1 |= TIM_CR1_CEN;
 
-	return result;
+	// Poll flag...
+	while (!(TIM3->SR & TIM_SR_UIF));
+
+	TIM2->SR &= ~TIM_SR_UIF; // Clear flag for next iteration
+	TIM2->CR1 &= ~TIM_CR1_CEN; // Stop the timer
 }
 
 int main(void) {
@@ -72,6 +66,9 @@ int main(void) {
 
     // Bit 0 enables TIM2 clock on the APB1 bus
     RCC->APB1ENR |= (1UL << 0);
+
+    // Bit 1 enables TIM3 clock on the APB1 bus
+    RCC->APB1ENR |= (1UL << 1);
 
     // ------------------------------------------------------------
     // 2. GPIO CONFIGURATION
@@ -102,12 +99,38 @@ int main(void) {
     GPIOG->OTYPER &= ~(1UL << 7);
 
     // LCD D4 (PB15, D11) -> Output
+    GPIOB->MODER  &= ~(3UL << (15 * 2));
+    GPIOB->MODER  |=  (1UL << (15 * 2));
+    GPIOB->OTYPER &= ~(1UL << 15);
+    GPIOB->OSPEEDR |= (0x3 << (15 * 2));
+
     // LCD D5 (PB14, D12) -> Output
+    GPIOB->MODER  &= ~(3UL << (14 * 2));
+    GPIOB->MODER  |=  (1UL << (14 * 2));
+    GPIOB->OTYPER &= ~(1UL << 14);
+    GPIOB->OSPEEDR |= (0x3 << (14 * 2));
+
     // LCD D6 (PB9, D14) -> Output
+    GPIOB->MODER  &= ~(3UL << (9 * 2));
+    GPIOB->MODER  |=  (1UL << (9 * 2));
+    GPIOB->OTYPER &= ~(1UL << 9);
+    GPIOB->OSPEEDR |= (0x3 << (9 * 2));
+
     // LCD D7 (PB8, D15) -> Output
+    GPIOB->MODER  &= ~(3UL << (8 * 2));
+    GPIOB->MODER  |=  (1UL << (8 * 2));
+    GPIOB->OTYPER &= ~(1UL << 8);
+    GPIOB->OSPEEDR |= (0x3 << (8 * 2));
 
     // LCD RS (PA8, D10) -> Output
+    GPIOA->MODER  &= ~(3UL << (8 * 2));
+    GPIOA->MODER  |=  (1UL << (8 * 2));
+    GPIOA->OTYPER &= ~(1UL << 8);
+
     // LCD E (PA15, D9) -> Output
+    GPIOA->MODER  &= ~(3UL << (15 * 2));
+    GPIOA->MODER  |=  (1UL << (15 * 2));
+    GPIOA->OTYPER &= ~(1UL << 15);
 
     // ------------------------------------------------------------
     // 3. EXTI INTERRUPT & PRIORITY CONFIGURATION (PI2)
@@ -157,6 +180,16 @@ int main(void) {
     TIM2->SR &= ~(1UL << 0);
     TIM2->CR1 |= (1UL << 0);
 
+    // ------------------------------------------------------------
+    // 5. TIMER 3 CONFIGURATION (~250ms update window)
+    // ------------------------------------------------------------
+    // Timer 3 is 16-bit!!
+
+    TIM3->PSC = 15999;	// Assumes 16MHz timer clock
+    TIM3->ARR = 0; 	// Clear to allow dynamic scaling
+    TIM3->SR &= ~(1UL << 0);
+    TIM3->EGR |= TIM_EGR_UG; // Forces an update event to latch Prescaler value into hw registers
+
     SequenceState current_state = BLINK_LED2;
     uint8_t toggle_count = 0;
     uint8_t pin_state = 0;
@@ -176,8 +209,8 @@ int main(void) {
             switch (current_state) {
                 case BLINK_LED2:
                     if (toggle_count < 10) { // 5 blinks = 10 toggles
-                    	char st1[] = "NOR -> GREEN -> ";
-						char st2[] = toString(toggle_Count / 2);
+                    	char *st1 = "NOR -> GREEN -> ";
+						char *st2 = toString(toggle_count / 2);
 
                     	LCD_DisplayString(strcat(st1, st2));
 
@@ -195,8 +228,8 @@ int main(void) {
 
                 case BLINK_LED3:
                     if (toggle_count < 16) { // 8 blinks = 16 toggles
-                    	char st1[] = "NOR -> RED -> ";
-						char st2[] = toString(toggle_Count / 2);
+                    	char *st1 = "NOR -> RED -> ";
+						char *st2 = toString(toggle_count / 2);
 
                     	LCD_DisplayString(strcat(st1, st2));
 
@@ -234,8 +267,8 @@ void EXTI2_IRQHandler(void) {
         // Execute the emergency sequence: 3 blinks on LED 1 (PI3)
         // 3 complete blinks = 6 alternate toggles
         for (int i = 0; i < 6; i++) {
-        	char st1[] = "INT2 -> YELLOW -> ";
-			char st2[] = toString(toggle_Count / 2);
+        	char *st1 = "INT2 -> YELLOW -> ";
+			char *st2 = toString(i / 2);
 
         	LCD_DisplayString(strcat(st1, st2));
 
@@ -265,8 +298,8 @@ void EXTI0_IRQHandler(void) {
         // Execute the emergency sequence: 5 blinks on LED 3 (PG7)
         // 5 complete blinks = 10 alternate toggles
         for (int i = 0; i < 10; i++) {
-        	char st1[] = "INT2 -> RED -> ";
-			char st2[] = toString(toggle_Count / 2);
+        	char *st1 = "INT2 -> RED -> ";
+			char *st2 = toString(i / 2);
 
         	LCD_DisplayString(strcat(st1, st2));
 
