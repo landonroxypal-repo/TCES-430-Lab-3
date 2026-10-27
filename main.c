@@ -1,4 +1,5 @@
 #include <stdint.h>
+#include <string.h>
 #include "stm32f7xx.h"
 
 #if !defined(__SOFT_FP__) && defined(__ARM_FP)
@@ -14,11 +15,49 @@ typedef enum {
 
 // Volatile variable to pass the halt state between the main loop and the ISR
 volatile uint8_t exti_triggered = 0;
+volatile uint8_t exti1_triggered = 0;
 
 void simple_delay(uint32_t count) {
     while (count--) {
         __asm__("NOP");
     }
+}
+
+void LCD_DisplayString(char *str) {
+//	while (*str) {
+//		SomeCharFunction(*str++);
+//	}
+// Do nothing for now
+}
+
+// Only needs to convert up to 2 digits in length
+char* toString(int num) {
+	char* result;
+
+	char zero[2];
+	zero[0] = '0';
+	zero[1] = '\0';
+
+	if (num < 0) {
+		result = 0;
+	} else if (num < 10) {
+		char str[0];
+	    str[0] = (char)('0' + num);
+	    str[1] = '\0';
+
+	    result = str;
+	} else if (num < 100) {
+		char str[0];
+	    str[0] = (char)('0' + (num / 10) % 10);
+	    str[1] = (char)('0' + num % 10);
+	    str[2] = '\0';
+
+	    result = str;
+	} else {
+		return zero;
+	}
+
+	return result;
 }
 
 int main(void) {
@@ -130,13 +169,18 @@ int main(void) {
             TIM2->SR &= ~(1UL << 0); // Clear timer update flag
 
             // If the priority interrupt is running, halt state transitions
-            if (exti_triggered) {
+            if (exti_triggered || exti1_triggered) {
                 continue;
             }
 
             switch (current_state) {
                 case BLINK_LED2:
                     if (toggle_count < 10) { // 5 blinks = 10 toggles
+                    	char st1[] = "NOR -> GREEN -> ";
+						char st2[] = toString(toggle_Count / 2);
+
+                    	LCD_DisplayString(strcat(st1, st2));
+
                         pin_state = !pin_state;
                         if (pin_state) GPIOB->BSRR = (1UL << 4);
                         else           GPIOB->BSRR = (1UL << (4 + 16));
@@ -151,6 +195,11 @@ int main(void) {
 
                 case BLINK_LED3:
                     if (toggle_count < 16) { // 8 blinks = 16 toggles
+                    	char st1[] = "NOR -> RED -> ";
+						char st2[] = toString(toggle_Count / 2);
+
+                    	LCD_DisplayString(strcat(st1, st2));
+
                         pin_state = !pin_state;
                         if (pin_state) GPIOG->BSRR = (1UL << 7);
                         else           GPIOG->BSRR = (1UL << (7 + 16));
@@ -185,6 +234,11 @@ void EXTI2_IRQHandler(void) {
         // Execute the emergency sequence: 3 blinks on LED 1 (PI3)
         // 3 complete blinks = 6 alternate toggles
         for (int i = 0; i < 6; i++) {
+        	char st1[] = "INT2 -> YELLOW -> ";
+			char st2[] = toString(toggle_Count / 2);
+
+        	LCD_DisplayString(strcat(st1, st2));
+
             if (i % 2 == 0) {
                 GPIOI->BSRR = (1UL << 3);         // Turn LED 1 ON
             } else {
@@ -206,11 +260,16 @@ void EXTI0_IRQHandler(void) {
     if (EXTI->PR & (1UL << 0)) {
         EXTI->PR = (1UL << 0); // Clear EXTI pending flag
 
-        exti_triggered = 1; // Raise halt flag for the main background thread
+        exti1_triggered = 1; // Raise halt flag for the main background thread
 
-        // Execute the emergency sequence: 3 blinks on LED 3 (PG7)
-        // 3 complete blinks = 6 alternate toggles
-        for (int i = 0; i < 6; i++) {
+        // Execute the emergency sequence: 5 blinks on LED 3 (PG7)
+        // 5 complete blinks = 10 alternate toggles
+        for (int i = 0; i < 10; i++) {
+        	char st1[] = "INT2 -> RED -> ";
+			char st2[] = toString(toggle_Count / 2);
+
+        	LCD_DisplayString(strcat(st1, st2));
+
             if (i % 2 == 0) {
             	GPIOG->BSRR = (1UL << 7);          // Turn LED 3 ON
             } else {
@@ -221,6 +280,6 @@ void EXTI0_IRQHandler(void) {
 
 	 EXTI->PR = (1UL << 0); // Clear EXTI pending flag
 	 NVIC->ICPR[0] = (1UL << 6);   // Clear NVIC Pending bit for IRQ6
-        exti_triggered = 0; // Drop halt flag, allowing LED 2/3 to resume instantly
+        exti1_triggered = 0; // Drop halt flag, allowing LED 2/3 to resume instantly
     }
 }
