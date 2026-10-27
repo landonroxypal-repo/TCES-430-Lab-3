@@ -6,6 +6,15 @@
   #warning "FPU is not initialized, but the project is compiling for an FPU. Please initialize the FPU before use."
 #endif
 
+// I like these one-line macros
+#define EN_HIGH()   (GPIOA->BSRR = (1 << 15))
+#define EN_LOW()    (GPIOA->BSRR = (1 << (15 + 16)))
+
+// I still like these one-line macros
+#define RS_HIGH()   (GPIOA->BSRR = (1 << 8))
+#define RS_LOW()    (GPIOA->BSRR = (1 << (8 + 16)))
+
+
 // Define states for our sequence state machine
 typedef enum {
     BLINK_LED2,  // Flash LED 2 on PB4 (5 times)
@@ -21,13 +30,6 @@ void simple_delay(uint32_t count) {
     while (count--) {
         __asm__("NOP");
     }
-}
-
-void LCD_DisplayString(char *str) {
-//	while (*str) {
-//		SomeCharFunction(*str++);
-//	}
-// Do nothing for now
 }
 
 // Only needs to convert up to 2 digits in length
@@ -50,9 +52,90 @@ void TIM3_DelayMs(uint32_t ms) {
 	// Poll flag...
 	while (!(TIM3->SR & TIM_SR_UIF));
 
-	TIM2->SR &= ~TIM_SR_UIF; // Clear flag for next iteration
-	TIM2->CR1 &= ~TIM_CR1_CEN; // Stop the timer
+	TIM3->SR &= ~TIM_SR_UIF; // Clear flag for next iteration
+	TIM3->CR1 &= ~TIM_CR1_CEN; // Stop the timer
 }
+
+void LCD_Nibble(uint8_t data, uint8_t regsel) {
+	if (regsel) {
+		RS_HIGH();
+	} else {
+		RS_LOW();
+	}
+
+	// Configure each bit:
+	if (data & 0x01) {
+		GPIOB->BSRR = (1 << 15);
+	} else {
+		GPIOB->BSRR = (1 << (15 + 16));
+	}
+
+	if (data & 0x02) {
+		GPIOB->BSRR = (1 << 14);
+	} else {
+		GPIOB->BSRR = (1 << (14 + 16));
+	}
+
+	if (data & 0x04) {
+		GPIOB->BSRR = (1 << 9);
+	} else {
+		GPIOB->BSRR = (1 << (9 + 16));
+	}
+
+	if (data & 0x08) {
+		GPIOB->BSRR = (1 << 8);
+	} else {
+		GPIOB->BSRR = (1 << (8 + 16));
+	}
+
+	// Cycle Enable pulse to latch!
+
+	EN_HIGH();
+	TIM3_DelayMs(2); // Setup time is 1 ms
+	EN_LOW(); // LATCH!
+	TIM3_DelayMs(2);
+}
+
+void LCD_Cmd(uint8_t cmd) {
+	LCD_Nibble(cmd >> 4, 0);
+	LCD_Nibble(cmd & 0x0F, 0);
+}
+
+void LCD_Data(uint8_t cmd) {
+	LCD_Nibble(cmd >> 4, 0);
+	LCD_Nibble(cmd & 0x0F, 0);
+}
+
+void LCD_Initialize(void) {
+	// Wait for VDD stability
+	TIM3_DelayMs(100);
+
+	// HD44780 4-bit mode
+	LCD_Nibble(0x03, 0);
+	TIM3_DelayMs(10);
+	LCD_Nibble(0x03, 0);
+	TIM3_DelayMs(2);
+	LCD_Nibble(0x03, 0);
+	TIM3_DelayMs(2);
+
+	LCD_Nibble(0x02, 0);
+	TIM3_DelayMs(2);
+
+	// Now that the LCD is in 4-bit mode, initialize commands!
+	LCD_Cmd(0x28); // 4-bit mode configuration
+	LCD_Cmd(0x0C); // Display ON, hide cursor
+	LCD_Cmd(0x06); // Increment write address
+	LCD_Cmd(0x01); // Execute clear layout
+	TIM3_DelayMs(5);
+}
+
+// Send each character through and do pointer arithmetic
+void LCD_DisplayString(char *str) {
+//	while (*str) {
+//		LCD_Data(*str++);
+//	}
+}
+
 
 int main(void) {
     // ------------------------------------------------------------
@@ -189,6 +272,8 @@ int main(void) {
     TIM3->ARR = 0; 	// Clear to allow dynamic scaling
     TIM3->SR &= ~(1UL << 0);
     TIM3->EGR |= TIM_EGR_UG; // Forces an update event to latch Prescaler value into hw registers
+
+    //LCD_Initialize();
 
     SequenceState current_state = BLINK_LED2;
     uint8_t toggle_count = 0;
