@@ -25,8 +25,8 @@ int main(void) {
     // ------------------------------------------------------------
     // 1. CLOCK ENABLES
     // ------------------------------------------------------------
-    // Bit 8 = GPIOI, Bit 1 = GPIOB, Bit 6 = GPIOG
-    RCC->AHB1ENR |= (1UL << 8) | (1UL << 1) | (1UL << 6);
+    // Bit 8 = GPIOI, Bit 1 = GPIOB, Bit 6 = GPIOG, Bit 1 = GPIOA
+    RCC->AHB1ENR |= (1UL << 8) | (1UL << 1) | (1UL << 6) | (1UL);
 
     // Bit 14 enables SYSCFG clock (for routing GPIO to EXTI)
     RCC->APB2ENR |= (1UL << 14);
@@ -46,6 +46,11 @@ int main(void) {
     GPIOI->MODER  &= ~(3UL << (2 * 2));
     GPIOI->PUPDR  &= ~(3UL << (2 * 2));
     GPIOI->PUPDR  |=  (1UL << (2 * 2));
+
+    // Switch (PI0, D10) -> Input with Pull-up
+    GPIOI->MODER  &= ~(3UL << (2 * 0));
+    GPIOI->PUPDR  &= ~(3UL << (2 * 0));
+    GPIOI->PUPDR  |=  (1UL << (2 * 0));
 
     // LED 2 (PB4, D3) -> Output
     GPIOB->MODER  &= ~(3UL << (4 * 2));
@@ -68,7 +73,7 @@ int main(void) {
     // ------------------------------------------------------------
     // 3. EXTI INTERRUPT & PRIORITY CONFIGURATION (PI2)
     // ------------------------------------------------------------
-    // Route Port I Pin 2 to EXTI2 (Bits [11:8] in EXTICR[0] gets 0x8)
+    // Route Port I Pin 2 (D8) to EXTI2 (Bits [11:8] in EXTICR[0] gets 0x8)
     SYSCFG->EXTICR[0] &= ~(0xFUL << 8);
     SYSCFG->EXTICR[0] |=  (0x8UL << 8);
 
@@ -86,7 +91,27 @@ int main(void) {
     NVIC->ISER[0] |= (1UL << 8);         //Enable IRQ 8
 
     // ------------------------------------------------------------
-    // 4. TIMER 2 CONFIGURATION (~250ms update window)
+    // 4. EXTI INTERRUPT & PRIORITY CONFIGURATION (PI0)
+    // ------------------------------------------------------------
+    // Route Port I Pin 2 (D8) to EXTI3 (Bits [15:12] in EXTICR[0] gets 0x8)
+    SYSCFG->EXTICR[0] &= ~(0xFUL << 15);
+    SYSCFG->EXTICR[0] |=  (0x8UL << 15);
+
+    EXTI->IMR  |= (1UL << 3);  // Unmask line 3
+    EXTI->FTSR |= (1UL << 3);  // Fall on button press (GND)
+    EXTI->RTSR &= ~(1UL << 3); // Disable rise trigger
+
+    // EXTI3 is IRQ number 9 in the NVIC table.
+    // NVIC->IP is a byte array indexed by IRQ number, EXTI3’s priority byte is IP[8]
+    // Only upper 4 bits are implemented (16 levels)
+    // lower number = higher priority
+    NVIC->IP[8] |=  (2UL << 8);   	  // Assign Priority 2 to IRQ9
+
+    // Enable IRQ9 (EXTI3); bit 9 of NVIC_ISER0
+    NVIC->ISER[0] |= (1UL << 9);         //Enable IRQ 9
+
+    // ------------------------------------------------------------
+    // 5. TIMER 2 CONFIGURATION (~250ms update window)
     // ------------------------------------------------------------
     TIM2->PSC = 15999;	//Assumes 16MHz timer clock
     TIM2->ARR = 250; 	//250ms
@@ -170,6 +195,32 @@ void EXTI2_IRQHandler(void) {
 
 	 EXTI->PR = (1UL << 2); // Clear EXTI pending flag
 	 NVIC->ICPR[0] = (1UL << 8);   // Clear NVIC Pending bit for IRQ8
+        exti_triggered = 0; // Drop halt flag, allowing LED 2/3 to resume instantly
+    }
+}
+
+// ------------------------------------------------------------
+// 6. INTERRUPT SERVICE ROUTINE (ISR) FOR EXTI3
+// ------------------------------------------------------------
+void EXTI3_IRQHandler(void) {
+    if (EXTI->PR & (1UL << 3)) {
+        EXTI->PR = (1UL << 3); // Clear EXTI pending flag
+
+        exti_triggered = 1; // Raise halt flag for the main background thread
+
+        // Execute the emergency sequence: 3 blinks on LED 1 (PI3)
+        // 3 complete blinks = 6 alternate toggles
+        for (int i = 0; i < 6; i++) {
+            if (i % 2 == 0) {
+            	GPIOG->BSRR = (1UL << 7);   // Turn LED 3 ON
+            } else {
+            	GPIOG->BSRR = (1UL << 7);   // Turn LED 3 OFF
+            }
+            simple_delay(800000);
+        }
+
+	 EXTI->PR = (1UL << 3); // Clear EXTI pending flag
+	 NVIC->ICPR[0] = (1UL << 9);   // Clear NVIC Pending bit for IRQ9
         exti_triggered = 0; // Drop halt flag, allowing LED 2/3 to resume instantly
     }
 }
