@@ -365,15 +365,12 @@ void EXTI2_IRQHandler(void) {
         // Execute the emergency sequence: 3 blinks on LED 1 (PI3)
         // 3 complete blinks = 6 alternate toggles
         for (int i = 0; i < 6; i++) {
-        	if (i % 2 == 0) {
+            if (i % 2 != 0) {
+                GPIOI->BSRR = (1UL << 3);
 				char buffer[20];
 
 				snprintf(buffer, 20, "INT1 -> YEL -> %d", (i + 1) / 2);
-            	LCD_DisplayString(buffer);
-        	}
-
-            if (i % 2 == 0) {
-                GPIOI->BSRR = (1UL << 3);         // Turn LED 1 ON
+            	LCD_DisplayString(buffer);// Turn LED 1 ON
             } else {
                 GPIOI->BSRR = (1UL << (3 + 16));   // Turn LED 1 OFF
             }
@@ -393,20 +390,17 @@ void EXTI0_IRQHandler(void) {
     if (EXTI->PR & (1UL << 0)) {
         EXTI->PR = (1UL << 0); // Clear EXTI pending flag
 
-        exti1_triggered = 1; // Raise halt flag for the main background thread
+        exti_triggered = 1; // Raise halt flag for the main background thread
 
         // Execute the emergency sequence: 5 blinks on LED 3 (PG7)
         // 5 complete blinks = 10 alternate toggles
         for (int i = 0; i < 10; i++) {
-        	if (i % 2 == 0) {
+            if (i % 2 != 0) {
+            	GPIOI->BSRR = (1UL << 1);
 				char buffer[20];
 
 				snprintf(buffer, 20, "INT2 -> BLU -> %d", (i + 1) / 2);
-            	LCD_DisplayString(buffer);
-        	}
-
-            if (i % 2 == 0) {
-            	GPIOI->BSRR = (1UL << 1);          // Turn LED 4 ON
+            	LCD_DisplayString(buffer);// Turn LED 4 ON
             } else {
             	GPIOI->BSRR = (1UL << (1 + 16));   // Turn LED 4 OFF
             }
@@ -415,6 +409,6 @@ void EXTI0_IRQHandler(void) {
 
 	 EXTI->PR = (1UL << 0); // Clear EXTI pending flag
 	 NVIC->ICPR[0] = (1UL << 6);   // Clear NVIC Pending bit for IRQ6
-        exti1_triggered = 0; // Drop halt flag, allowing LED 2/3 to resume instantly
+	 exti_triggered = 0; // Drop halt flag, allowing LED 2/3 to resume instantly
     }
 }
