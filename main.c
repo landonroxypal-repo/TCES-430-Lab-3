@@ -1,4 +1,5 @@
 #include <stdint.h>
+#include <stdio.h>
 #include "stm32f7xx.h"
 
 #if !defined(__SOFT_FP__) && defined(__ARM_FP)
@@ -101,8 +102,8 @@ void LCD_Cmd(uint8_t cmd) {
 }
 
 void LCD_Data(uint8_t cmd) {
-	LCD_Nibble(cmd >> 4, 0);
-	LCD_Nibble(cmd & 0x0F, 0);
+	LCD_Nibble(cmd >> 4, 1);
+	LCD_Nibble(cmd & 0x0F, 1);
 }
 
 void LCD_Initialize(void) {
@@ -130,9 +131,11 @@ void LCD_Initialize(void) {
 
 // Send each character through and do pointer arithmetic
 void LCD_DisplayString(char *str) {
-//	while (*str) {
-//		LCD_Data(*str++);
-//	}
+    LCD_Cmd(0x01); // Execute clear layout
+
+	while (*str) {
+		LCD_Data(*str++);
+	}
 }
 
 
@@ -179,6 +182,12 @@ int main(void) {
     GPIOG->MODER  &= ~(3UL << (7 * 2));
     GPIOG->MODER  |=  (1UL << (7 * 2));
     GPIOG->OTYPER &= ~(1UL << 7);
+
+    // LED 4 (PI1, D13) -> Output
+    GPIOI->MODER  &= ~(3UL << (1 * 2));
+    GPIOI->MODER  |=  (1UL << (1 * 2));
+    GPIOI->OTYPER &= ~(1UL << 1);
+
 
     // LCD D4 (PB15, D11) -> Output
     GPIOB->MODER  &= ~(3UL << (15 * 2));
@@ -272,13 +281,11 @@ int main(void) {
     TIM3->SR &= ~(1UL << 0);
     TIM3->EGR |= TIM_EGR_UG; // Forces an update event to latch Prescaler value into hw registers
 
-    //LCD_Initialize();
+    LCD_Initialize();
 
     SequenceState current_state = BLINK_LED2;
     uint8_t toggle_count = 0;
     uint8_t pin_state = 0;
-
-    LCD_DisplayString("Awesome test");
 
     while (1) {
         // ------------------------------------------------------------
@@ -295,15 +302,17 @@ int main(void) {
             switch (current_state) {
                 case BLINK_LED2:
                     if (toggle_count < 10) { // 5 blinks = 10 toggles
-//						char buffer[20];
-//
-//						snprintf(buffer, 20, "NOR -> GREEN -> %d", toggle_count / 2);
-//                    	LCD_DisplayString(buffer);
-
                         pin_state = !pin_state;
                         if (pin_state) GPIOB->BSRR = (1UL << 4);
                         else           GPIOB->BSRR = (1UL << (4 + 16));
                         toggle_count++;
+
+                    	if (toggle_count % 2 == 0) {
+    						char buffer[20];
+
+    						snprintf(buffer, 20, "NOR -> GRE -> %d", (toggle_count + 1) / 2);
+                        	LCD_DisplayString(buffer);
+                    	}
                     } else {
                         GPIOB->BSRR = (1UL << (4 + 16));
                         toggle_count = 0;
@@ -314,19 +323,22 @@ int main(void) {
 
                 case BLINK_LED3:
                     if (toggle_count < 16) { // 8 blinks = 16 toggles
-//						char buffer[20];
-//
-//						snprintf(buffer, 20, "NOR -> RED -> %d", toggle_count / 2);
-//                    	LCD_DisplayString(buffer);
-
                         pin_state = !pin_state;
                         if (pin_state) GPIOG->BSRR = (1UL << 7);
                         else           GPIOG->BSRR = (1UL << (7 + 16));
                         toggle_count++;
+
+                    	if (toggle_count % 2 == 0) {
+    						char buffer[20];
+
+    						snprintf(buffer, 20, "NOR -> RED -> %d", (toggle_count + 1) / 2);
+                        	LCD_DisplayString(buffer);
+                    	}
                     } else {
                         GPIOG->BSRR = (1UL << (7 + 16));
                         toggle_count = 0;
                         pin_state = 0;
+                    	LCD_DisplayString("Timer...");
                         TIM2->ARR = 2000; // Switch to 2-second pause duration
                         current_state = PAUSE_STATE;
                     }
@@ -353,10 +365,12 @@ void EXTI2_IRQHandler(void) {
         // Execute the emergency sequence: 3 blinks on LED 1 (PI3)
         // 3 complete blinks = 6 alternate toggles
         for (int i = 0; i < 6; i++) {
-//        	char *st1 = "INT2 -> YELLOW -> ";
-//			char *st2 = toString(i / 2);
-//
-//        	LCD_DisplayString(strcat(st1, st2));
+        	if (i % 2 == 0) {
+				char buffer[20];
+
+				snprintf(buffer, 20, "INT1 -> YEL -> %d", (i + 1) / 2);
+            	LCD_DisplayString(buffer);
+        	}
 
             if (i % 2 == 0) {
                 GPIOI->BSRR = (1UL << 3);         // Turn LED 1 ON
@@ -384,15 +398,17 @@ void EXTI0_IRQHandler(void) {
         // Execute the emergency sequence: 5 blinks on LED 3 (PG7)
         // 5 complete blinks = 10 alternate toggles
         for (int i = 0; i < 10; i++) {
-//        	char *st1 = "INT2 -> RED -> ";
-//			char *st2 = toString(i / 2);
-//
-//        	LCD_DisplayString(strcat(st1, st2));
+        	if (i % 2 == 0) {
+				char buffer[20];
+
+				snprintf(buffer, 20, "INT2 -> BLU -> %d", (i + 1) / 2);
+            	LCD_DisplayString(buffer);
+        	}
 
             if (i % 2 == 0) {
-            	GPIOG->BSRR = (1UL << 7);          // Turn LED 3 ON
+            	GPIOI->BSRR = (1UL << 1);          // Turn LED 4 ON
             } else {
-            	GPIOG->BSRR = (1UL << (7 + 16));   // Turn LED 3 OFF
+            	GPIOI->BSRR = (1UL << (1 + 16));   // Turn LED 4 OFF
             }
             simple_delay(800000);
         }
