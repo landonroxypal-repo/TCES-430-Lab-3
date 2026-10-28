@@ -375,7 +375,7 @@ void EXTI2_IRQHandler(void) {
                 GPIOI->BSRR = (1UL << 3);
 				char buffer[20];
 
-				snprintf(buffer, 20, "INT1 -> YEL -> %d", (i + 1) / 2);
+				snprintf(buffer, 20, "INT1 -> YEL -> %d", (i / 2) + 1);
             	LCD_DisplayString(buffer);// Turn LED 1 ON
             } else {
                 GPIOI->BSRR = (1UL << (3 + 16));   // Turn LED 1 OFF
@@ -401,11 +401,11 @@ void EXTI0_IRQHandler(void) {
         // Execute the emergency sequence: 5 blinks on LED 4 (PI1)
         // 5 complete blinks = 10 alternate toggles
         for (int i = 0; i < 10; i++) {
-            if (i % 2 != 0) {
+            if (i % 2 == 0) {
             	GPIOI->BSRR = (1UL << 1);
 				char buffer[20];
 
-				snprintf(buffer, 20, "INT2 -> BLU -> %d", (i + 1) / 2);
+				snprintf(buffer, 20, "INT2 -> BLU -> %d", (i / 2) + 1);
             	LCD_DisplayString(buffer);// Turn LED 4 ON
             } else {
             	GPIOI->BSRR = (1UL << (1 + 16));   // Turn LED 4 OFF
