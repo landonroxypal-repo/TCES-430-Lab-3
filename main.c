@@ -42,18 +42,15 @@ char* toString(uint8_t num) {
 	return str;
 }
 
+// TIM3 free-runs at 1 tick/ms, so we only read it and never start/stop/reset it.
+// This makes it safe to call from main AND from an ISR that interrupts a delay.
 void TIM3_DelayMs(uint32_t ms) {
 	if (ms == 0) return;
 
-	TIM3->CNT = 0;
-	TIM3->ARR = ms;
-	TIM3->CR1 |= TIM_CR1_CEN;
+	uint16_t start = TIM3->CNT;
 
-	// Poll flag...
-	while (!(TIM3->SR & TIM_SR_UIF));
-
-	TIM3->SR &= ~TIM_SR_UIF; // Clear flag for next iteration
-	TIM3->CR1 &= ~TIM_CR1_CEN; // Stop the timer
+	// <= so at least 'ms' full ticks pass (the first tick may be partial)
+	while ((uint16_t)(TIM3->CNT - start) <= ms);
 }
 
 void LCD_Nibble(uint8_t data, uint8_t regsel) {
@@ -96,14 +93,23 @@ void LCD_Nibble(uint8_t data, uint8_t regsel) {
 	TIM3_DelayMs(2);
 }
 
+// Interrupts are blocked while a byte is sent so an ISR can't split the two nibbles
+// (that knocks the LCD out of 4-bit sync). PRIMASK is restored, not just re-enabled,
+// so this also works when called from inside an ISR.
 void LCD_Cmd(uint8_t cmd) {
+	uint32_t primask = __get_PRIMASK();
+	__disable_irq();
 	LCD_Nibble(cmd >> 4, 0);
 	LCD_Nibble(cmd & 0x0F, 0);
+	__set_PRIMASK(primask);
 }
 
 void LCD_Data(uint8_t cmd) {
+	uint32_t primask = __get_PRIMASK();
+	__disable_irq();
 	LCD_Nibble(cmd >> 4, 1);
 	LCD_Nibble(cmd & 0x0F, 1);
+	__set_PRIMASK(primask);
 }
 
 void LCD_Initialize(void) {
@@ -276,10 +282,10 @@ int main(void) {
     // ------------------------------------------------------------
     // Timer 3 is 16-bit!!
 
-    TIM3->PSC = 15999;	// Assumes 16MHz timer clock
-    TIM3->ARR = 0; 	// Clear to allow dynamic scaling
-    TIM3->SR &= ~(1UL << 0);
+    TIM3->PSC = 15999;	// Assumes 16MHz timer clock -> 1 tick per ms
+    TIM3->ARR = 0xFFFF; 	// Free-running, wraps every ~65 s
     TIM3->EGR |= TIM_EGR_UG; // Forces an update event to latch Prescaler value into hw registers
+    TIM3->CR1 |= TIM_CR1_CEN; // Left running forever; TIM3_DelayMs only reads CNT
 
     LCD_Initialize();
 
@@ -365,7 +371,7 @@ void EXTI2_IRQHandler(void) {
         // Execute the emergency sequence: 3 blinks on LED 1 (PI3)
         // 3 complete blinks = 6 alternate toggles
         for (int i = 0; i < 6; i++) {
-            if (i % 2 != 0) {
+            if (i % 2 == 0) {
                 GPIOI->BSRR = (1UL << 3);
 				char buffer[20];
 
@@ -390,9 +396,9 @@ void EXTI0_IRQHandler(void) {
     if (EXTI->PR & (1UL << 0)) {
         EXTI->PR = (1UL << 0); // Clear EXTI pending flag
 
-        exti_triggered = 1; // Raise halt flag for the main background thread
+        exti1_triggered = 1; // Raise halt flag for the main background thread
 
-        // Execute the emergency sequence: 5 blinks on LED 3 (PG7)
+        // Execute the emergency sequence: 5 blinks on LED 4 (PI1)
         // 5 complete blinks = 10 alternate toggles
         for (int i = 0; i < 10; i++) {
             if (i % 2 != 0) {
@@ -409,6 +415,6 @@ void EXTI0_IRQHandler(void) {
 
 	 EXTI->PR = (1UL << 0); // Clear EXTI pending flag
 	 NVIC->ICPR[0] = (1UL << 6);   // Clear NVIC Pending bit for IRQ6
-	 exti_triggered = 0; // Drop halt flag, allowing LED 2/3 to resume instantly
+	 exti1_triggered = 0; // Drop halt flag, allowing LED 2/3 to resume instantly
     }
 }
